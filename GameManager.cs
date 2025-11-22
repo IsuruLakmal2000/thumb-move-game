@@ -10,6 +10,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private CatController catController;
     [SerializeField] private SwipeDetector swipeDetector;
     [SerializeField] private ScoreManager scoreManager;
+    [SerializeField] private ThumbVisualizer thumbVisualizer;
     
     private bool gameStarted = false;
     private bool gameFailed = false;
@@ -92,6 +93,11 @@ public class GameManager : MonoBehaviour
             swipeDetector.EnableSwipeDetection(false);
         }
         
+        if (thumbVisualizer != null)
+        {
+            thumbVisualizer.Reset();
+        }
+        
         // Start countdown
         StartCoroutine(CountdownCoroutine());
     }
@@ -132,6 +138,11 @@ public class GameManager : MonoBehaviour
         {
             catController.EnableBombSystem(true);
         }
+        
+        if (thumbVisualizer != null)
+        {
+            thumbVisualizer.StartRhythm();
+        }
     }
     
     private void HandleSwipeUp()
@@ -151,6 +162,12 @@ public class GameManager : MonoBehaviour
         if (!catController.IsUp)
         {
             catController.ShowCatUp();
+            
+            // Rotate thumb up
+            if (thumbVisualizer != null)
+            {
+                thumbVisualizer.RotateUp();
+            }
             
             // Add score for successful swipe up
             if (scoreManager != null)
@@ -203,6 +220,12 @@ public class GameManager : MonoBehaviour
         {
             catController.ShowBombDown();
             catController.ActivateBomb();
+            
+            // Freeze thumb rotation for 1 second when bomb appears
+            if (thumbVisualizer != null)
+            {
+                thumbVisualizer.FreezeForDuration(1f);
+            }
         }
     }
     
@@ -229,6 +252,11 @@ public class GameManager : MonoBehaviour
         if (catController != null)
         {
             catController.EnableBombSystem(false);
+        }
+        
+        if (thumbVisualizer != null)
+        {
+            thumbVisualizer.StopRhythm();
         }
         
         // Show fail UI

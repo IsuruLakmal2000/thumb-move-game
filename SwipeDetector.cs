@@ -5,7 +5,7 @@ using System;
 public class SwipeDetector : MonoBehaviour
 {
     [Header("Settings")]
-    [SerializeField] private float swipeThreshold = 50f;
+    [SerializeField] private float swipeThreshold = 7f;
     
     public event Action OnSwipeUp;
     public event Action OnSwipeDown;
