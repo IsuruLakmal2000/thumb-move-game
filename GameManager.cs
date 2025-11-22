@@ -1,87 +1,60 @@
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
-using UnityEngine.InputSystem;
 using System.Collections;
 
 public class GameManager : MonoBehaviour
 {
-    [Header("UI References")]
+    [Header("References")]
     [SerializeField] private Button startButton;
-    [SerializeField] private TextMeshProUGUI countdownText;
-    [SerializeField] private TextMeshProUGUI levelFailedText;
-    [SerializeField] private TextMeshProUGUI scoreText;
-    
-    [Header("Cat References")]
-    [SerializeField] private SpriteRenderer catSpriteRenderer;
-    [SerializeField] private Sprite catDownSprite;
-    [SerializeField] private Sprite catUpSprite;
-    
-    [Header("Bomb References")]
-    [SerializeField] private Sprite bombDownSprite;
-    [SerializeField] private Sprite bombUpSprite;
-    
-    [Header("Settings")]
-    [SerializeField] private float swipeThreshold = 50f;
-    [SerializeField] private float bombAppearChance = 0.3f; // 30% chance
-    [SerializeField] private float bombTimeLimit = 1f; // 1 second to react
+    [SerializeField] private UIManager uiManager;
+    [SerializeField] private CatController catController;
+    [SerializeField] private SwipeDetector swipeDetector;
+    [SerializeField] private ScoreManager scoreManager;
     
     private bool gameStarted = false;
     private bool gameFailed = false;
-    private Vector2 lastTouchPosition;
-    private bool isTouching = false;
-    private bool isCurrentlyCatUp = false;
-    private bool isBombActive = false;
-    private float bombTimer = 0f;
-    private int currentScore = 0;
     
     void Start()
     {
-        // Make sure cat starts with down sprite
-        if (catSpriteRenderer != null && catDownSprite != null)
-        {
-            catSpriteRenderer.sprite = catDownSprite;
-        }
-        
         // Setup start button
         if (startButton != null)
         {
             startButton.onClick.AddListener(OnStartButtonPressed);
         }
         
-        // Hide countdown text initially
-        if (countdownText != null)
+        // Setup swipe detector events
+        if (swipeDetector != null)
         {
-            countdownText.gameObject.SetActive(false);
+            swipeDetector.OnSwipeUp += HandleSwipeUp;
+            swipeDetector.OnSwipeDown += HandleSwipeDown;
         }
         
-        // Hide level failed text initially
-        if (levelFailedText != null)
+        // Setup cat controller events
+        if (catController != null)
         {
-            levelFailedText.gameObject.SetActive(false);
+            catController.OnBombTimeout += HandleBombTimeout;
         }
         
-        // Initialize score display
-        UpdateScoreDisplay();
+        // Initialize UI
+        if (uiManager != null && scoreManager != null)
+        {
+            uiManager.UpdateScore(scoreManager.CurrentScore);
+        }
     }
     
-    void Update()
+    void OnDestroy()
     {
-        if (!gameStarted || gameFailed) return;
-        
-        // Handle bomb timer
-        if (isBombActive)
+        // Unsubscribe from events
+        if (swipeDetector != null)
         {
-            bombTimer += Time.deltaTime;
-            if (bombTimer >= bombTimeLimit)
-            {
-                // Time's up! Change bomb back to cat
-                ChangeToCat();
-            }
+            swipeDetector.OnSwipeUp -= HandleSwipeUp;
+            swipeDetector.OnSwipeDown -= HandleSwipeDown;
         }
         
-        // Handle touch input for swipe detection
-        HandleTouchInput();
+        if (catController != null)
+        {
+            catController.OnBombTimeout -= HandleBombTimeout;
+        }
     }
     
     private void OnStartButtonPressed()
@@ -94,24 +67,29 @@ public class GameManager : MonoBehaviour
         
         // Reset game state
         gameFailed = false;
-        isBombActive = false;
-        bombTimer = 0f;
-        isCurrentlyCatUp = false;
-        currentScore = 0;
+        gameStarted = false;
         
-        // Update score display
-        UpdateScoreDisplay();
-        
-        // Reset cat sprite
-        if (catSpriteRenderer != null && catDownSprite != null)
+        // Reset all managers
+        if (catController != null)
         {
-            catSpriteRenderer.sprite = catDownSprite;
+            catController.Reset();
+            catController.EnableBombSystem(false);
         }
         
-        // Hide level failed text
-        if (levelFailedText != null)
+        if (scoreManager != null)
         {
-            levelFailedText.gameObject.SetActive(false);
+            scoreManager.ResetScore();
+        }
+        
+        if (uiManager != null)
+        {
+            uiManager.HideLevelFailed();
+            uiManager.UpdateScore(0);
+        }
+        
+        if (swipeDetector != null)
+        {
+            swipeDetector.EnableSwipeDetection(false);
         }
         
         // Start countdown
@@ -120,167 +98,96 @@ public class GameManager : MonoBehaviour
     
     private IEnumerator CountdownCoroutine()
     {
-        if (countdownText != null)
-        {
-            countdownText.gameObject.SetActive(true);
-        }
-        
         // Countdown from 3 to 1
         for (int i = 3; i > 0; i--)
         {
-            if (countdownText != null)
+            if (uiManager != null)
             {
-                countdownText.text = i.ToString();
+                uiManager.ShowCountdown(i.ToString());
             }
             yield return new WaitForSeconds(1f);
         }
         
-        // Show "GO!" or hide countdown
-        if (countdownText != null)
+        // Show "GO!"
+        if (uiManager != null)
         {
-            countdownText.text = "GO!";
+            uiManager.ShowCountdown("GO!");
         }
         yield return new WaitForSeconds(0.5f);
         
-        if (countdownText != null)
+        if (uiManager != null)
         {
-            countdownText.gameObject.SetActive(false);
+            uiManager.HideCountdown();
         }
         
         // Start the game
         gameStarted = true;
-    }
-    
-    private void HandleTouchInput()
-    {
-        // Check if there's any touch input
-        if (Touchscreen.current != null)
-        {
-            var touch = Touchscreen.current.primaryTouch;
-            
-            // Touch started
-            if (touch.press.wasPressedThisFrame)
-            {
-                lastTouchPosition = touch.position.ReadValue();
-                isTouching = true;
-            }
-            
-            // Touch is being held - detect continuous swipes
-            if (touch.press.isPressed && isTouching)
-            {
-                Vector2 currentTouchPosition = touch.position.ReadValue();
-                DetectContinuousSwipe(lastTouchPosition, currentTouchPosition);
-                lastTouchPosition = currentTouchPosition;
-            }
-            
-            // Touch ended
-            if (touch.press.wasReleasedThisFrame)
-            {
-                isTouching = false;
-            }
-        }
-        // Fallback to mouse for testing in editor
-        else if (Mouse.current != null)
-        {
-            if (Mouse.current.leftButton.wasPressedThisFrame)
-            {
-                lastTouchPosition = Mouse.current.position.ReadValue();
-                isTouching = true;
-            }
-            
-            if (Mouse.current.leftButton.isPressed && isTouching)
-            {
-                Vector2 currentTouchPosition = Mouse.current.position.ReadValue();
-                DetectContinuousSwipe(lastTouchPosition, currentTouchPosition);
-                lastTouchPosition = currentTouchPosition;
-            }
-            
-            if (Mouse.current.leftButton.wasReleasedThisFrame)
-            {
-                isTouching = false;
-            }
-        }
-    }
-    
-    private void DetectContinuousSwipe(Vector2 lastPos, Vector2 currentPos)
-    {
-        Vector2 swipeDelta = currentPos - lastPos;
         
-        // Check if movement is significant enough
-        if (swipeDelta.magnitude < swipeThreshold)
+        if (swipeDetector != null)
         {
-            return;
+            swipeDetector.EnableSwipeDetection(true);
         }
         
-        // Determine if it's a vertical swipe
-        if (Mathf.Abs(swipeDelta.y) > Mathf.Abs(swipeDelta.x))
+        if (catController != null)
         {
-            if (swipeDelta.y > 0 && !isCurrentlyCatUp)
-            {
-                // Swipe up - only trigger if cat is currently down
-                OnSwipeUp();
-            }
-            else if (swipeDelta.y < 0 && isCurrentlyCatUp)
-            {
-                // Swipe down - only trigger if cat is currently up
-                OnSwipeDown();
-            }
+            catController.EnableBombSystem(true);
         }
     }
     
-    private void OnSwipeUp()
+    private void HandleSwipeUp()
     {
-        if (catSpriteRenderer == null) return;
+        if (!gameStarted || gameFailed) return;
+        if (catController == null) return;
         
         // Check if bomb is active - FAIL!
-        if (isBombActive)
+        if (catController.IsBombActive)
         {
-            if (bombUpSprite != null)
-            {
-                catSpriteRenderer.sprite = bombUpSprite;
-            }
+            catController.ShowBombUp();
             FailLevel();
             return;
         }
         
         // Normal cat swipe up
-        if (catUpSprite != null)
+        if (!catController.IsUp)
         {
-            catSpriteRenderer.sprite = catUpSprite;
-            isCurrentlyCatUp = true;
+            catController.ShowCatUp();
             
-            // Increment score for successful swipe up
-            currentScore++;
-            UpdateScoreDisplay();
-            
-            Debug.Log("Swipe Up - Cat Up! Score: " + currentScore);
+            // Add score for successful swipe up
+            if (scoreManager != null)
+            {
+                scoreManager.AddPoint();
+                
+                if (uiManager != null)
+                {
+                    uiManager.UpdateScore(scoreManager.CurrentScore);
+                }
+            }
         }
     }
     
-    private void OnSwipeDown()
+    private void HandleSwipeDown()
     {
-        if (catSpriteRenderer == null) return;
+        if (!gameStarted || gameFailed) return;
+        if (catController == null) return;
         
         // If bomb is active, deactivate it and change to cat
-        if (isBombActive)
+        if (catController.IsBombActive)
         {
-            ChangeToCat();
+            catController.DeactivateBomb();
+            catController.ShowCatDown();
             return;
         }
         
         // Normal cat swipe down
-        if (catDownSprite != null)
+        if (catController.IsUp)
         {
-            catSpriteRenderer.sprite = catDownSprite;
-            isCurrentlyCatUp = false;
+            catController.ShowCatDown();
             
             // Random chance to spawn bomb
-            if (Random.value < bombAppearChance)
+            if (catController.ShouldSpawnBomb())
             {
                 StartCoroutine(ShowBombAfterDelay());
             }
-            
-            Debug.Log("Swipe Down - Cat Down!");
         }
     }
     
@@ -291,26 +198,20 @@ public class GameManager : MonoBehaviour
         
         if (gameFailed || !gameStarted) yield break;
         
-        // Show bomb down sprite
-        if (catSpriteRenderer != null && bombDownSprite != null && !isCurrentlyCatUp)
+        // Show bomb
+        if (catController != null && !catController.IsUp)
         {
-            catSpriteRenderer.sprite = bombDownSprite;
-            isBombActive = true;
-            bombTimer = 0f;
-            Debug.Log("BOMB APPEARED! Swipe down within " + bombTimeLimit + " seconds!");
+            catController.ShowBombDown();
+            catController.ActivateBomb();
         }
     }
     
-    private void ChangeToCat()
+    private void HandleBombTimeout()
     {
-        isBombActive = false;
-        bombTimer = 0f;
-        
-        if (catSpriteRenderer != null && catDownSprite != null)
+        // Bomb timed out, change back to cat
+        if (catController != null)
         {
-            catSpriteRenderer.sprite = catDownSprite;
-            isCurrentlyCatUp = false;
-            Debug.Log("Bomb avoided! Changed back to cat.");
+            catController.ShowCatDown();
         }
     }
     
@@ -318,13 +219,22 @@ public class GameManager : MonoBehaviour
     {
         gameFailed = true;
         gameStarted = false;
-        isBombActive = false;
         
-        // Show level failed text
-        if (levelFailedText != null)
+        // Disable systems
+        if (swipeDetector != null)
         {
-            levelFailedText.gameObject.SetActive(true);
-            levelFailedText.text = "LEVEL FAILED!";
+            swipeDetector.EnableSwipeDetection(false);
+        }
+        
+        if (catController != null)
+        {
+            catController.EnableBombSystem(false);
+        }
+        
+        // Show fail UI
+        if (uiManager != null)
+        {
+            uiManager.ShowLevelFailed();
         }
         
         // Show start button again to retry
@@ -334,13 +244,5 @@ public class GameManager : MonoBehaviour
         }
         
         Debug.Log("LEVEL FAILED! You swiped up on the bomb!");
-    }
-    
-    private void UpdateScoreDisplay()
-    {
-        if (scoreText != null)
-        {
-            scoreText.text = "Score: " + currentScore;
-        }
     }
 }
