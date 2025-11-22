@@ -14,6 +14,9 @@ public class GameManager : MonoBehaviour
     
     private bool gameStarted = false;
     private bool gameFailed = false;
+    [SerializeField] private float freezeSecondsWhenBombAppears = 2f;
+    
+    private bool canDeactivateBomb = false; // Prevents bomb deactivation during initial swipe
     
     void Start()
     {
@@ -28,6 +31,7 @@ public class GameManager : MonoBehaviour
         {
             swipeDetector.OnSwipeUp += HandleSwipeUp;
             swipeDetector.OnSwipeDown += HandleSwipeDown;
+            swipeDetector.OnTouchEnded += HandleTouchEnded;
         }
         
         // Setup cat controller events
@@ -50,6 +54,7 @@ public class GameManager : MonoBehaviour
         {
             swipeDetector.OnSwipeUp -= HandleSwipeUp;
             swipeDetector.OnSwipeDown -= HandleSwipeDown;
+            swipeDetector.OnTouchEnded -= HandleTouchEnded;
         }
         
         if (catController != null)
@@ -188,10 +193,15 @@ public class GameManager : MonoBehaviour
         if (catController == null) return;
         
         // If bomb is active, deactivate it and change to cat
+        // BUT only if we're allowed to (not during the initial swipe that spawned it)
         if (catController.IsBombActive)
         {
-            catController.DeactivateBomb();
-            catController.ShowCatDown();
+            if (canDeactivateBomb)
+            {
+                catController.DeactivateBomb();
+                catController.ShowCatDown();
+                canDeactivateBomb = false; // Reset flag
+            }
             return;
         }
         
@@ -203,6 +213,7 @@ public class GameManager : MonoBehaviour
             // Random chance to spawn bomb
             if (catController.ShouldSpawnBomb())
             {
+                canDeactivateBomb = false; // Prevent immediate deactivation
                 StartCoroutine(ShowBombAfterDelay());
             }
         }
@@ -221,11 +232,20 @@ public class GameManager : MonoBehaviour
             catController.ShowBombDown();
             catController.ActivateBomb();
             
-            // Freeze thumb rotation for 1 second when bomb appears
+            // Freeze thumb rotation for 2 seconds when bomb appears
             if (thumbVisualizer != null)
             {
-                thumbVisualizer.FreezeForDuration(1f);
+                thumbVisualizer.FreezeForDuration(freezeSecondsWhenBombAppears);
             }
+        }
+    }
+    
+    private void HandleTouchEnded()
+    {
+        // When touch ends, allow bomb to be deactivated on the NEXT swipe down
+        if (catController != null && catController.IsBombActive)
+        {
+            canDeactivateBomb = true;
         }
     }
     
@@ -236,6 +256,7 @@ public class GameManager : MonoBehaviour
         {
             catController.ShowCatDown();
         }
+        canDeactivateBomb = false; // Reset flag
     }
     
     private void FailLevel()

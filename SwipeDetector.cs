@@ -5,12 +5,14 @@ using System;
 public class SwipeDetector : MonoBehaviour
 {
     [Header("Settings")]
-    [SerializeField] private float swipeThreshold = 7f;
+    [SerializeField] private float swipeThreshold = 50f; // Minimum distance for a swipe
     
     public event Action OnSwipeUp;
     public event Action OnSwipeDown;
+    public event Action OnTouchEnded; // New event for when touch/click ends
     
-    private Vector2 lastTouchPosition;
+    private Vector2 touchStartPosition; // Position where touch/click started
+    private Vector2 lastSwipePosition; // Last position where a swipe was detected
     private bool isTouching = false;
     private bool isEnabled = false;
     
@@ -40,7 +42,8 @@ public class SwipeDetector : MonoBehaviour
             // Touch started
             if (touch.press.wasPressedThisFrame)
             {
-                lastTouchPosition = touch.position.ReadValue();
+                touchStartPosition = touch.position.ReadValue();
+                lastSwipePosition = touchStartPosition;
                 isTouching = true;
             }
             
@@ -48,14 +51,14 @@ public class SwipeDetector : MonoBehaviour
             if (touch.press.isPressed && isTouching)
             {
                 Vector2 currentTouchPosition = touch.position.ReadValue();
-                DetectContinuousSwipe(lastTouchPosition, currentTouchPosition);
-                lastTouchPosition = currentTouchPosition;
+                DetectContinuousSwipe(currentTouchPosition);
             }
             
             // Touch ended
             if (touch.press.wasReleasedThisFrame)
             {
                 isTouching = false;
+                OnTouchEnded?.Invoke(); // Notify that touch has ended
             }
         }
         // Fallback to mouse for testing in editor
@@ -63,27 +66,29 @@ public class SwipeDetector : MonoBehaviour
         {
             if (Mouse.current.leftButton.wasPressedThisFrame)
             {
-                lastTouchPosition = Mouse.current.position.ReadValue();
+                touchStartPosition = Mouse.current.position.ReadValue();
+                lastSwipePosition = touchStartPosition;
                 isTouching = true;
             }
             
             if (Mouse.current.leftButton.isPressed && isTouching)
             {
                 Vector2 currentTouchPosition = Mouse.current.position.ReadValue();
-                DetectContinuousSwipe(lastTouchPosition, currentTouchPosition);
-                lastTouchPosition = currentTouchPosition;
+                DetectContinuousSwipe(currentTouchPosition);
             }
             
             if (Mouse.current.leftButton.wasReleasedThisFrame)
             {
                 isTouching = false;
+                OnTouchEnded?.Invoke(); // Notify that touch has ended
             }
         }
     }
     
-    private void DetectContinuousSwipe(Vector2 lastPos, Vector2 currentPos)
+    private void DetectContinuousSwipe(Vector2 currentPos)
     {
-        Vector2 swipeDelta = currentPos - lastPos;
+        // Calculate delta from the last swipe detection point
+        Vector2 swipeDelta = currentPos - lastSwipePosition;
         
         // Check if movement is significant enough
         if (swipeDelta.magnitude < swipeThreshold)
@@ -96,13 +101,17 @@ public class SwipeDetector : MonoBehaviour
         {
             if (swipeDelta.y > 0)
             {
-                // Swipe up
+                // Swipe up detected
                 OnSwipeUp?.Invoke();
+                // Update last swipe position to current position
+                lastSwipePosition = currentPos;
             }
             else
             {
-                // Swipe down
+                // Swipe down detected
                 OnSwipeDown?.Invoke();
+                // Update last swipe position to current position
+                lastSwipePosition = currentPos;
             }
         }
     }
