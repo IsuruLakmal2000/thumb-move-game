@@ -40,6 +40,15 @@ public class UIManager : MonoBehaviour
         }
     }
     
+    public void ShowLevelFailed(string customMessage)
+    {
+        if (levelFailedText != null)
+        {
+            levelFailedText.gameObject.SetActive(true);
+            levelFailedText.text = customMessage;
+        }
+    }
+    
     public void HideLevelFailed()
     {
         if (levelFailedText != null)

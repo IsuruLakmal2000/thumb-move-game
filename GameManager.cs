@@ -41,6 +41,12 @@ public class GameManager : MonoBehaviour
             catController.OnBombTimeout += HandleBombTimeout;
         }
         
+        // Setup thumb visualizer timeout event
+        if (thumbVisualizer != null)
+        {
+            thumbVisualizer.OnUserTooSlow += HandleUserTooSlow;
+        }
+        
         // Initialize UI
         if (uiManager != null && scoreManager != null)
         {
@@ -61,6 +67,11 @@ public class GameManager : MonoBehaviour
         if (catController != null)
         {
             catController.OnBombTimeout -= HandleBombTimeout;
+        }
+        
+        if (thumbVisualizer != null)
+        {
+            thumbVisualizer.OnUserTooSlow -= HandleUserTooSlow;
         }
     }
     
@@ -181,16 +192,16 @@ public class GameManager : MonoBehaviour
                     break;
             }
             
+            // Notify thumb visualizer that cat sprite appeared UP
+            if (thumbVisualizer != null)
+            {
+                thumbVisualizer.OnCatSpriteAppeared(true);
+            }
+            
             // Play cat up sound
             if (audioManager != null)
             {
                 audioManager.PlayCatUpSound();
-            }
-            
-            // Rotate thumb up
-            if (thumbVisualizer != null)
-            {
-                thumbVisualizer.RotateUp();
             }
             
             // Add score for successful swipe up
@@ -219,6 +230,13 @@ public class GameManager : MonoBehaviour
             {
                 catController.DeactivateBomb();
                 catController.ShowCatDown();
+                
+                // Notify thumb visualizer that cat sprite appeared DOWN (after bomb deactivation)
+                if (thumbVisualizer != null)
+                {
+                    thumbVisualizer.OnCatSpriteAppeared(false);
+                }
+                
                 canDeactivateBomb = false; // Reset flag
             }
             return;
@@ -239,6 +257,12 @@ public class GameManager : MonoBehaviour
                 case CatController.CoupleType.Bomb:
                     catController.ShowCatDown(); // Fallback
                     break;
+            }
+            
+            // Notify thumb visualizer that cat sprite appeared DOWN
+            if (thumbVisualizer != null)
+            {
+                thumbVisualizer.OnCatSpriteAppeared(false);
             }
             
             // Track this swipe for dynamic bomb chance calculation
@@ -293,7 +317,27 @@ public class GameManager : MonoBehaviour
         canDeactivateBomb = false; // Reset flag
     }
     
+    private void HandleUserTooSlow()
+    {
+        Debug.Log("🔴 HandleUserTooSlow() CALLED in GameManager");
+        Debug.Log($"gameStarted = {gameStarted}, gameFailed = {gameFailed}");
+        
+        if (!gameStarted || gameFailed)
+        {
+            Debug.Log("⚠️ Ignoring timeout - game not started or already failed");
+            return;
+        }
+        
+        Debug.Log("💥 Executing FailLevel('TOO LATE!')");
+        FailLevel("TOO LATE!");
+    }
+    
     private void FailLevel()
+    {
+        FailLevel("LEVEL FAILED!");
+    }
+    
+    private void FailLevel(string message)
     {
         gameFailed = true;
         gameStarted = false;
@@ -314,10 +358,10 @@ public class GameManager : MonoBehaviour
             thumbVisualizer.StopRhythm();
         }
         
-        // Show fail UI
+        // Show fail UI with custom message
         if (uiManager != null)
         {
-            uiManager.ShowLevelFailed();
+            uiManager.ShowLevelFailed(message);
         }
         
         // Show start button again to retry
@@ -325,7 +369,5 @@ public class GameManager : MonoBehaviour
         {
             startButton.gameObject.SetActive(true);
         }
-        
-        Debug.Log("LEVEL FAILED! You swiped up on the bomb!");
     }
 }

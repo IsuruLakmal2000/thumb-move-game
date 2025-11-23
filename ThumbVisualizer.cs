@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using System;
 
 public class ThumbVisualizer : MonoBehaviour
 {
@@ -12,10 +13,21 @@ public class ThumbVisualizer : MonoBehaviour
     [SerializeField] private float rhythmInterval = 0.7f; // Time between rotations
     [SerializeField] private bool autoRotate = false; // Enable/disable automatic rotation
     
+    [Header("Timeout Settings")]
+    [SerializeField] private float userResponseTimeout = 0.85f; // Max time for user to respond to thumb movement
+    
+    // Event for timeout
+    public event Action OnUserTooSlow;
+    
     private bool isUp = false;
     private float targetRotation = 0f;
     private Coroutine rhythmCoroutine;
     private bool isPaused = false;
+    
+    // Timeout tracking - tracks if cat sprite appeared in time
+    private float lastThumbMoveTime = 0f;
+    private bool waitingForCatToAppear = false;
+    private bool expectingCatUp = false;
     
     void Start()
     {
@@ -34,11 +46,35 @@ public class ThumbVisualizer : MonoBehaviour
         
         float newZ = Mathf.Lerp(currentZ, targetRotation, Time.deltaTime * rotationSpeed);
         transform.localEulerAngles = new Vector3(0, 0, newZ);
+
+        // Check if cat sprite appeared in time after thumb moved
+        if (waitingForCatToAppear)
+        {
+            float timeElapsed = Time.time - lastThumbMoveTime;
+            
+            // Log every 0.2 seconds to show we're checking
+            if (Mathf.FloorToInt(timeElapsed / 0.2f) != Mathf.FloorToInt((timeElapsed - Time.deltaTime) / 0.2f))
+            {
+                Debug.Log($"⏱️ Waiting... {timeElapsed:F2}s / {userResponseTimeout}s");
+            }
+            
+            if (timeElapsed > userResponseTimeout)
+            {
+                waitingForCatToAppear = false;
+                
+                Debug.Log($"❌ TIMEOUT TRIGGERED! Time: {timeElapsed:F2}s > {userResponseTimeout}s");
+                Debug.Log($"Expected cat to {(expectingCatUp ? "appear UP" : "appear DOWN")}");
+                Debug.Log($"OnUserTooSlow null? {(OnUserTooSlow == null)}");
+                
+                OnUserTooSlow?.Invoke();
+            }
+        }
     }
     
     public void StartRhythm()
     {
         autoRotate = true;
+        Debug.Log("🟢 StartRhythm() called - autoRotate = true");
         if (rhythmCoroutine != null)
         {
             StopCoroutine(rhythmCoroutine);
@@ -49,13 +85,17 @@ public class ThumbVisualizer : MonoBehaviour
     public void StopRhythm()
     {
         autoRotate = false;
+        waitingForCatToAppear = false; // Cancel any pending timeout
+        
         if (rhythmCoroutine != null)
         {
             StopCoroutine(rhythmCoroutine);
             rhythmCoroutine = null;
         }
-        // Return to down position
-        RotateDown();
+        
+        // Return to down position (without triggering timeout since autoRotate is now false)
+        targetRotation = downRotation;
+        isUp = false;
     }
     
     private IEnumerator RhythmCoroutine()
@@ -90,14 +130,16 @@ public class ThumbVisualizer : MonoBehaviour
     {
         targetRotation = upRotation;
         isUp = true;
-        Debug.Log("Thumb rotating UP to " + upRotation + " degrees");
+        Debug.Log($"⬆️ RotateUp() called - autoRotate = {autoRotate}");
+        StartTimeoutTracking(true);
     }
     
     public void RotateDown()
     {
         targetRotation = downRotation;
         isUp = false;
-        Debug.Log("Thumb rotating DOWN to " + downRotation + " degrees");
+        Debug.Log($"⬇️ RotateDown() called - autoRotate = {autoRotate}");
+        StartTimeoutTracking(false);
     }
     
     public void RotateToPosition(bool up)
@@ -124,18 +166,17 @@ public class ThumbVisualizer : MonoBehaviour
         targetRotation = downRotation;
         isUp = false;
         isPaused = false;
+        waitingForCatToAppear = false;
     }
     
     public void PauseRhythm()
     {
         isPaused = true;
-        Debug.Log("Thumb rhythm PAUSED");
     }
     
     public void ResumeRhythm()
     {
         isPaused = false;
-        Debug.Log("Thumb rhythm RESUMED");
     }
     
     public void FreezeForDuration(float duration)
@@ -151,4 +192,42 @@ public class ThumbVisualizer : MonoBehaviour
     }
     
     public bool IsUp => isUp;
+
+    // Called by GameManager when cat sprite appears (user successfully swiped and sprite changed)
+    public void OnCatSpriteAppeared(bool catIsUp)
+    {
+        // Cat sprite appeared, cancel timeout tracking
+        if (waitingForCatToAppear)
+        {
+            bool correctDirection = (catIsUp && expectingCatUp) || (!catIsUp && !expectingCatUp);
+            if (correctDirection)
+            {
+                waitingForCatToAppear = false;
+            }
+        }
+    }
+
+    private void StartTimeoutTracking(bool expectUp)
+    {
+        Debug.Log($"🔵 StartTimeoutTracking() called - autoRotate = {autoRotate}, expectUp = {expectUp}");
+        
+        if (autoRotate) // Only track timeout when in auto rhythm mode
+        {
+            // If already waiting for a response, trigger timeout for previous movement first
+            if (waitingForCatToAppear)
+            {
+                Debug.Log($"⚠️ Previous timeout still active! Triggering timeout for previous movement.");
+                OnUserTooSlow?.Invoke();
+            }
+            
+            lastThumbMoveTime = Time.time;
+            waitingForCatToAppear = true;
+            expectingCatUp = expectUp;
+            Debug.Log($"✅ Timeout tracking STARTED - waitingForCatToAppear = {waitingForCatToAppear}, timeout = {userResponseTimeout}s");
+        }
+        else
+        {
+            Debug.Log("⚠️ Timeout tracking NOT started - autoRotate is false");
+        }
+    }
 }
