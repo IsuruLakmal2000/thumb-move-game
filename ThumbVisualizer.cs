@@ -14,7 +14,7 @@ public class ThumbVisualizer : MonoBehaviour
     [SerializeField] private bool autoRotate = false; // Enable/disable automatic rotation
     
     [Header("Timeout Settings")]
-    [SerializeField] private float userResponseTimeout = 0.85f; // Max time for user to respond to thumb movement
+    [SerializeField] private float userResponseTimeout = 1.0f; // Max time for user to respond to thumb movement
     
     // Event for timeout
     public event Action OnUserTooSlow;
@@ -26,8 +26,10 @@ public class ThumbVisualizer : MonoBehaviour
     
     // Timeout tracking - tracks if cat sprite appeared in time
     private float lastThumbMoveTime = 0f;
+    private float lastUserResponseTime = 0f;
     private bool waitingForCatToAppear = false;
     private bool expectingCatUp = false;
+    private bool timeoutPaused = false; // Pause timeout during bomb scenarios
     
     void Start()
     {
@@ -47,22 +49,22 @@ public class ThumbVisualizer : MonoBehaviour
         float newZ = Mathf.Lerp(currentZ, targetRotation, Time.deltaTime * rotationSpeed);
         transform.localEulerAngles = new Vector3(0, 0, newZ);
 
-        // Check if cat sprite appeared in time after thumb moved
-        if (waitingForCatToAppear)
+        // Check if user has been inactive for too long
+        if (waitingForCatToAppear && !timeoutPaused) // Don't check timeout during bomb
         {
-            float timeElapsed = Time.time - lastThumbMoveTime;
+            float timeSinceLastResponse = Time.time - lastUserResponseTime;
             
             // Log every 0.2 seconds to show we're checking
-            if (Mathf.FloorToInt(timeElapsed / 0.2f) != Mathf.FloorToInt((timeElapsed - Time.deltaTime) / 0.2f))
+            if (Mathf.FloorToInt(timeSinceLastResponse / 0.2f) != Mathf.FloorToInt((timeSinceLastResponse - Time.deltaTime) / 0.2f))
             {
-                Debug.Log($"⏱️ Waiting... {timeElapsed:F2}s / {userResponseTimeout}s");
+                Debug.Log($"⏱️ Waiting for response... {timeSinceLastResponse:F2}s / {userResponseTimeout}s");
             }
             
-            if (timeElapsed > userResponseTimeout)
+            if (timeSinceLastResponse > userResponseTimeout)
             {
                 waitingForCatToAppear = false;
                 
-                Debug.Log($"❌ TIMEOUT TRIGGERED! Time: {timeElapsed:F2}s > {userResponseTimeout}s");
+                Debug.Log($"❌ TIMEOUT TRIGGERED! No response for {timeSinceLastResponse:F2}s > {userResponseTimeout}s");
                 Debug.Log($"Expected cat to {(expectingCatUp ? "appear UP" : "appear DOWN")}");
                 Debug.Log($"OnUserTooSlow null? {(OnUserTooSlow == null)}");
                 
@@ -74,6 +76,7 @@ public class ThumbVisualizer : MonoBehaviour
     public void StartRhythm()
     {
         autoRotate = true;
+        lastUserResponseTime = Time.time; // Reset the response timer when game starts
         Debug.Log("🟢 StartRhythm() called - autoRotate = true");
         if (rhythmCoroutine != null)
         {
@@ -187,7 +190,14 @@ public class ThumbVisualizer : MonoBehaviour
     private IEnumerator FreezeCoroutine(float duration)
     {
         PauseRhythm();
+        timeoutPaused = true; // Pause timeout tracking during bomb
+        Debug.Log("ThumbVisualizer: Timeout PAUSED (bomb appeared)");
+        
         yield return new WaitForSeconds(duration);
+        
+        timeoutPaused = false; // Resume timeout tracking after bomb
+        lastUserResponseTime = Time.time; // Reset timer so user isn't immediately penalized
+        Debug.Log("ThumbVisualizer: Timeout RESUMED (bomb cleared)");
         ResumeRhythm();
     }
     
@@ -196,7 +206,11 @@ public class ThumbVisualizer : MonoBehaviour
     // Called by GameManager when cat sprite appears (user successfully swiped and sprite changed)
     public void OnCatSpriteAppeared(bool catIsUp)
     {
-        // Cat sprite appeared, cancel timeout tracking
+        // Cat sprite appeared, update last response time
+        lastUserResponseTime = Time.time;
+        Debug.Log($"✅ User responded! Reset timeout timer.");
+        
+        // Cancel timeout tracking if in correct direction
         if (waitingForCatToAppear)
         {
             bool correctDirection = (catIsUp && expectingCatUp) || (!catIsUp && !expectingCatUp);
@@ -213,17 +227,16 @@ public class ThumbVisualizer : MonoBehaviour
         
         if (autoRotate) // Only track timeout when in auto rhythm mode
         {
-            // If already waiting for a response, trigger timeout for previous movement first
-            if (waitingForCatToAppear)
+            // Start tracking on first move, then keep tracking continuously
+            if (!waitingForCatToAppear)
             {
-                Debug.Log($"⚠️ Previous timeout still active! Triggering timeout for previous movement.");
-                OnUserTooSlow?.Invoke();
+                waitingForCatToAppear = true;
+                Debug.Log($"✅ Timeout tracking STARTED - timeout after {userResponseTimeout}s of inactivity");
             }
             
+            // Update what we're expecting
             lastThumbMoveTime = Time.time;
-            waitingForCatToAppear = true;
             expectingCatUp = expectUp;
-            Debug.Log($"✅ Timeout tracking STARTED - waitingForCatToAppear = {waitingForCatToAppear}, timeout = {userResponseTimeout}s");
         }
         else
         {
