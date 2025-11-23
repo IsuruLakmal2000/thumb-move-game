@@ -164,10 +164,22 @@ public class GameManager : MonoBehaviour
             return;
         }
         
-        // Normal cat swipe up
+        // Normal swipe up - works with any couple
         if (!catController.IsUp)
         {
-            catController.ShowCatUp();
+            // Show appropriate up sprite based on current couple
+            switch (catController.CurrentCouple)
+            {
+                case CatController.CoupleType.Cat:
+                    catController.ShowCatUp();
+                    break;
+                case CatController.CoupleType.Dog:
+                    catController.ShowDogUp();
+                    break;
+                case CatController.CoupleType.Bomb:
+                    catController.ShowCatUp(); // Fallback
+                    break;
+            }
             
             // Play cat up sound
             if (audioManager != null)
@@ -212,12 +224,27 @@ public class GameManager : MonoBehaviour
             return;
         }
         
-        // Normal cat swipe down
+        // Normal swipe down - works with any couple
         if (catController.IsUp)
         {
-            catController.ShowCatDown();
+            // Show appropriate down sprite based on current couple
+            switch (catController.CurrentCouple)
+            {
+                case CatController.CoupleType.Cat:
+                    catController.ShowCatDown();
+                    break;
+                case CatController.CoupleType.Dog:
+                    catController.ShowDogDown();
+                    break;
+                case CatController.CoupleType.Bomb:
+                    catController.ShowCatDown(); // Fallback
+                    break;
+            }
             
-            // Random chance to spawn bomb
+            // Track this swipe for dynamic bomb chance calculation
+            catController.TrackSwipeDown();
+            
+            // Random chance to spawn bomb (with dynamic probability)
             if (catController.ShouldSpawnBomb())
             {
                 canDeactivateBomb = false; // Prevent immediate deactivation
