@@ -11,6 +11,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private SwipeDetector swipeDetector;
     [SerializeField] private ScoreManager scoreManager;
     [SerializeField] private ThumbVisualizer thumbVisualizer;
+    [SerializeField] private AudioManager audioManager;
     
     private bool gameStarted = false;
     private bool gameFailed = false;
@@ -167,6 +168,12 @@ public class GameManager : MonoBehaviour
         if (!catController.IsUp)
         {
             catController.ShowCatUp();
+            
+            // Play cat up sound
+            if (audioManager != null)
+            {
+                audioManager.PlayCatUpSound();
+            }
             
             // Rotate thumb up
             if (thumbVisualizer != null)
