@@ -187,6 +187,12 @@ public class GameManager : MonoBehaviour
                 case CatController.CoupleType.Dog:
                     catController.ShowDogUp();
                     break;
+                case CatController.CoupleType.Pig:
+                    catController.ShowPigUp();
+                    break;
+                case CatController.CoupleType.CatSnake:
+                    catController.ShowCatSnakeUp();
+                    break;
                 case CatController.CoupleType.Bomb:
                     catController.ShowCatUp(); // Fallback
                     break;
@@ -222,16 +228,35 @@ public class GameManager : MonoBehaviour
         if (!gameStarted || gameFailed) return;
         if (catController == null) return;
         
-        // If bomb is active, deactivate it and change to cat
+        // If bomb is active, deactivate it and show current couple's down sprite
         // BUT only if we're allowed to (not during the initial swipe that spawned it)
         if (catController.IsBombActive)
         {
             if (canDeactivateBomb)
             {
                 catController.DeactivateBomb();
-                catController.ShowCatDown();
                 
-                // Notify thumb visualizer that cat sprite appeared DOWN (after bomb deactivation)
+                // Show down sprite of the CURRENT couple (not always cat)
+                switch (catController.CurrentCouple)
+                {
+                    case CatController.CoupleType.Cat:
+                        catController.ShowCatDown();
+                        break;
+                    case CatController.CoupleType.Dog:
+                        catController.ShowDogDown();
+                        break;
+                    case CatController.CoupleType.Pig:
+                        catController.ShowPigDown();
+                        break;
+                    case CatController.CoupleType.CatSnake:
+                        catController.ShowCatSnakeDown();
+                        break;
+                    default:
+                        catController.ShowCatDown();
+                        break;
+                }
+                
+                // Notify thumb visualizer that sprite appeared DOWN (after bomb deactivation)
                 if (thumbVisualizer != null)
                 {
                     thumbVisualizer.OnCatSpriteAppeared(false);
@@ -253,6 +278,12 @@ public class GameManager : MonoBehaviour
                     break;
                 case CatController.CoupleType.Dog:
                     catController.ShowDogDown();
+                    break;
+                case CatController.CoupleType.Pig:
+                    catController.ShowPigDown();
+                    break;
+                case CatController.CoupleType.CatSnake:
+                    catController.ShowCatSnakeDown();
                     break;
                 case CatController.CoupleType.Bomb:
                     catController.ShowCatDown(); // Fallback
@@ -309,10 +340,28 @@ public class GameManager : MonoBehaviour
     
     private void HandleBombTimeout()
     {
-        // Bomb timed out, change back to cat
+        // Bomb timed out, show current couple's down sprite
         if (catController != null)
         {
-            catController.ShowCatDown();
+            // Show down sprite of the CURRENT couple (not always cat)
+            switch (catController.CurrentCouple)
+            {
+                case CatController.CoupleType.Cat:
+                    catController.ShowCatDown();
+                    break;
+                case CatController.CoupleType.Dog:
+                    catController.ShowDogDown();
+                    break;
+                case CatController.CoupleType.Pig:
+                    catController.ShowPigDown();
+                    break;
+                case CatController.CoupleType.CatSnake:
+                    catController.ShowCatSnakeDown();
+                    break;
+                default:
+                    catController.ShowCatDown();
+                    break;
+            }
         }
         canDeactivateBomb = false; // Reset flag
     }

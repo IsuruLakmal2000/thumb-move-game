@@ -11,6 +11,10 @@ public class CatController : MonoBehaviour
     [SerializeField] private Sprite bombUpSprite;
     [SerializeField] private Sprite dogDownSprite;
     [SerializeField] private Sprite dogUpSprite;
+    [SerializeField] private Sprite pigDownSprite;
+    [SerializeField] private Sprite pigUpSprite;
+    [SerializeField] private Sprite catSnakeDownSprite;
+    [SerializeField] private Sprite catSnakeUpSprite;
     
     [Header("Couple Settings")]
     [SerializeField] private int minRoundsPerCouple = 3; // Minimum rounds before switching couple
@@ -30,7 +34,7 @@ public class CatController : MonoBehaviour
     
     public event Action OnBombTimeout;
     
-    public enum CoupleType { Cat, Bomb, Dog }
+    public enum CoupleType { Cat, Bomb, Dog, Pig, CatSnake }
     
     private bool isUp = false;
     private bool isBomb = false;
@@ -44,6 +48,7 @@ public class CatController : MonoBehaviour
     
     private CoupleType currentCouple = CoupleType.Cat;
     private int currentCoupleRounds = 0;
+    private CoupleType coupleBeforeBomb = CoupleType.Cat; // Store couple before bomb appears
     
     // Dynamic bomb chance tracking
     private int consecutiveSameCoupleSwipes = 0; // Tracks swipes with same couple (Cat or Dog)
@@ -123,28 +128,47 @@ public class CatController : MonoBehaviour
             isUp = true;
             isBomb = false;
             
-            // Count this as a round completion
+            // Count this as a round completion (one complete DOWN->UP cycle)
             currentCoupleRounds++;
+            Debug.Log($"✅ Round completed for {currentCouple}. Total rounds: {currentCoupleRounds}/{minRoundsPerCouple}");
             CheckForCoupleChange();
         }
     }
     
-    // Legacy methods for backward compatibility
+    // Legacy methods - these DO NOT change the couple type, just show the sprite
     public void ShowCatDown()
     {
-        currentCouple = CoupleType.Cat;
-        ShowDown();
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && catDownSprite != null)
+        {
+            spriteRenderer.sprite = catDownSprite;
+            isUp = false;
+            isBomb = false;
+        }
     }
     
     public void ShowCatUp()
     {
-        currentCouple = CoupleType.Cat;
-        ShowUp();
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && catUpSprite != null)
+        {
+            spriteRenderer.sprite = catUpSprite;
+            isUp = true;
+            isBomb = false;
+            
+            // Count round and check for change
+            currentCoupleRounds++;
+            Debug.Log($"✅ Round completed for {currentCouple}. Total rounds: {currentCoupleRounds}/{minRoundsPerCouple}");
+            CheckForCoupleChange();
+        }
     }
     
     public void ShowBombDown()
     {
-        currentCouple = CoupleType.Bomb;
+        // DON'T change currentCouple - bomb is temporary, keep the active couple
+        // Store the current couple so we can restore it after bomb
+        coupleBeforeBomb = currentCouple;
+        
         if (spriteRenderer != null && bombDownSprite != null)
         {
             spriteRenderer.sprite = bombDownSprite;
@@ -153,12 +177,14 @@ public class CatController : MonoBehaviour
             
             // Trigger shake animation when bomb appears
             StartShake();
+            
+            Debug.Log($"💣 Bomb appeared! Preserving couple: {currentCouple} (rounds: {currentCoupleRounds})");
         }
     }
     
     public void ShowBombUp()
     {
-        currentCouple = CoupleType.Bomb;
+        // DON'T change currentCouple - just show bomb sprite
         if (spriteRenderer != null && bombUpSprite != null)
         {
             spriteRenderer.sprite = bombUpSprite;
@@ -169,7 +195,7 @@ public class CatController : MonoBehaviour
     
     public void ShowDogDown()
     {
-        currentCouple = CoupleType.Dog;
+        // Only show sprite, don't change couple type
         if (spriteRenderer != null && dogDownSprite != null)
         {
             spriteRenderer.sprite = dogDownSprite;
@@ -180,12 +206,71 @@ public class CatController : MonoBehaviour
     
     public void ShowDogUp()
     {
-        currentCouple = CoupleType.Dog;
+        // Only show sprite, don't change couple type
         if (spriteRenderer != null && dogUpSprite != null)
         {
             spriteRenderer.sprite = dogUpSprite;
             isUp = true;
             isBomb = false;
+            
+            // Count round and check for change
+            currentCoupleRounds++;
+            Debug.Log($"✅ Round completed for {currentCouple}. Total rounds: {currentCoupleRounds}/{minRoundsPerCouple}");
+            CheckForCoupleChange();
+        }
+    }
+    
+    public void ShowPigDown()
+    {
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && pigDownSprite != null)
+        {
+            spriteRenderer.sprite = pigDownSprite;
+            isUp = false;
+            isBomb = false;
+        }
+    }
+    
+    public void ShowPigUp()
+    {
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && pigUpSprite != null)
+        {
+            spriteRenderer.sprite = pigUpSprite;
+            isUp = true;
+            isBomb = false;
+            
+            // Count round and check for change
+            currentCoupleRounds++;
+            Debug.Log($"✅ Round completed for {currentCouple}. Total rounds: {currentCoupleRounds}/{minRoundsPerCouple}");
+            CheckForCoupleChange();
+        }
+    }
+    
+    public void ShowCatSnakeDown()
+    {
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && catSnakeDownSprite != null)
+        {
+            spriteRenderer.sprite = catSnakeDownSprite;
+            isUp = false;
+            isBomb = false;
+        }
+    }
+    
+    public void ShowCatSnakeUp()
+    {
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && catSnakeUpSprite != null)
+        {
+            spriteRenderer.sprite = catSnakeUpSprite;
+            isUp = true;
+            isBomb = false;
+            
+            // Count round and check for change
+            currentCoupleRounds++;
+            Debug.Log($"✅ Round completed for {currentCouple}. Total rounds: {currentCoupleRounds}/{minRoundsPerCouple}");
+            CheckForCoupleChange();
         }
     }
     
@@ -198,10 +283,16 @@ public class CatController : MonoBehaviour
     
     public void Reset()
     {
+        // Reset to Cat couple at start
+        currentCouple = CoupleType.Cat;
+        currentCoupleRounds = 0;
+        
         ShowCatDown();
         DeactivateBomb();
         ResetSwipeCounters();
         lastNonBombCouple = CoupleType.Cat;
+        
+        Debug.Log($"🔄 CatController Reset - Starting with {currentCouple} couple");
     }
     
     // Bomb Management Methods
@@ -216,13 +307,20 @@ public class CatController : MonoBehaviour
     
     public bool ShouldSpawnBomb()
     {
+        // IMPORTANT: Don't allow bombs until current couple has completed minimum rounds
+        if (currentCoupleRounds < minRoundsPerCouple)
+        {
+            Debug.Log($"🚫 BOMB BLOCKED! Current couple ({currentCouple}) only has {currentCoupleRounds}/{minRoundsPerCouple} rounds");
+            return false;
+        }
+        
         // Calculate dynamic bomb chance based on consecutive swipes
         float currentBombChance = CalculateDynamicBombChance();
         bool shouldSpawn = UnityEngine.Random.value < currentBombChance;
         
         if (shouldSpawn)
         {
-            Debug.Log($"BOMB SPAWNING! Chance was {currentBombChance:P0} (Same couple: {consecutiveSameCoupleSwipes}, Total: {totalConsecutiveSwipes})");
+            Debug.Log($"💣 BOMB SPAWNING! Chance was {currentBombChance:P0} (Same couple: {consecutiveSameCoupleSwipes}, Total: {totalConsecutiveSwipes})");
         }
         
         return shouldSpawn;
@@ -303,6 +401,10 @@ public class CatController : MonoBehaviour
                 return bombDownSprite;
             case CoupleType.Dog:
                 return dogDownSprite;
+            case CoupleType.Pig:
+                return pigDownSprite;
+            case CoupleType.CatSnake:
+                return catSnakeDownSprite;
             default:
                 return catDownSprite;
         }
@@ -318,6 +420,10 @@ public class CatController : MonoBehaviour
                 return bombUpSprite;
             case CoupleType.Dog:
                 return dogUpSprite;
+            case CoupleType.Pig:
+                return pigUpSprite;
+            case CoupleType.CatSnake:
+                return catSnakeUpSprite;
             default:
                 return catUpSprite;
         }
@@ -328,27 +434,31 @@ public class CatController : MonoBehaviour
         // Only check for change after minimum rounds
         if (currentCoupleRounds < minRoundsPerCouple)
         {
-            Debug.Log($"Current couple: {currentCouple}, Rounds: {currentCoupleRounds}/{minRoundsPerCouple}");
+            Debug.Log($"⏳ Current couple: {currentCouple}, Rounds: {currentCoupleRounds}/{minRoundsPerCouple} - Need more rounds before switching");
             return;
         }
         
-        // Random chance to change couple after min rounds
-        if (UnityEngine.Random.value < coupleChangeChance)
+        // We've reached the minimum, now there's a random chance to change
+        float roll = UnityEngine.Random.value;
+        Debug.Log($"🎲 Couple change check: {currentCouple} has {currentCoupleRounds} rounds. Roll: {roll:F2} vs {coupleChangeChance:F2}");
+        
+        if (roll < coupleChangeChance)
         {
             ChangeToRandomCouple();
         }
         else
         {
-            Debug.Log($"Staying with {currentCouple} couple. Rounds: {currentCoupleRounds}");
+            Debug.Log($"✋ Staying with {currentCouple} couple. Rounds: {currentCoupleRounds}");
         }
     }
     
     private void ChangeToRandomCouple()
     {
         CoupleType oldCouple = currentCouple;
+        int oldRounds = currentCoupleRounds;
         
-        // Get a different couple type
-        CoupleType[] allCouples = { CoupleType.Cat, CoupleType.Bomb, CoupleType.Dog };
+        // Get a different couple type (excluding Bomb type)
+        CoupleType[] allCouples = { CoupleType.Cat, CoupleType.Dog, CoupleType.Pig, CoupleType.CatSnake };
         CoupleType newCouple;
         
         do
@@ -360,7 +470,7 @@ public class CatController : MonoBehaviour
         currentCouple = newCouple;
         currentCoupleRounds = 0;
         
-        Debug.Log($"Couple changed from {oldCouple} to {newCouple}!");
+        Debug.Log($"🔄 COUPLE CHANGED! {oldCouple} → {newCouple} (completed {oldRounds} rounds with {oldCouple})");
     }
     
     public void SetCouple(CoupleType coupleType)
