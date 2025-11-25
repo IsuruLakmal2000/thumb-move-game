@@ -12,6 +12,13 @@ public class GameManager : MonoBehaviour
     [SerializeField] private ScoreManager scoreManager;
     [SerializeField] private ThumbVisualizer thumbVisualizer;
     [SerializeField] private AudioManager audioManager;
+    [SerializeField] private GameOverPanelController gameOverPanel;
+    [SerializeField] private CountdownController countdownController;
+    
+    [Header("VFX")]
+    [SerializeField] private GameObject explosionVFXPrefab;
+    [SerializeField] private Transform vfxSpawnPoint; // Optional: specific position for VFX
+    [SerializeField] private float gameOverDelayAfterExplosion = 1f; // Delay before showing game over panel
     
     private bool gameStarted = false;
     private bool gameFailed = false;
@@ -47,6 +54,12 @@ public class GameManager : MonoBehaviour
             thumbVisualizer.OnUserTooSlow += HandleUserTooSlow;
         }
         
+        // Setup game over panel events
+        if (gameOverPanel != null)
+        {
+            gameOverPanel.OnStartAgainClicked += OnStartButtonPressed;
+        }
+        
         // Initialize UI
         if (uiManager != null && scoreManager != null)
         {
@@ -73,16 +86,28 @@ public class GameManager : MonoBehaviour
         {
             thumbVisualizer.OnUserTooSlow -= HandleUserTooSlow;
         }
+        
+        if (gameOverPanel != null)
+        {
+            gameOverPanel.OnStartAgainClicked -= OnStartButtonPressed;
+        }
     }
     
     private void OnStartButtonPressed()
     {
+      
+        // Play button click sound
+        if (audioManager != null)
+        {
+            audioManager.PlayButtonClickSound();
+        }
+        
         // Hide the start button
         if (startButton != null)
         {
             startButton.gameObject.SetActive(false);
         }
-        
+      
         // Reset game state
         gameFailed = false;
         gameStarted = false;
@@ -115,30 +140,53 @@ public class GameManager : MonoBehaviour
             thumbVisualizer.Reset();
         }
         
+        // Hide game over panel if it was visible
+        if (gameOverPanel != null)
+        {
+            gameOverPanel.HidePanel();
+        }
+        
         // Start countdown
-        StartCoroutine(CountdownCoroutine());
+            StartCoroutine(CountdownCoroutine());
     }
     
     private IEnumerator CountdownCoroutine()
     {
-        // Countdown from 3 to 1
+        // Countdown from 3 to 1 using sprite-based countdown
         for (int i = 3; i > 0; i--)
         {
-            if (uiManager != null)
+            // Show sprite countdown (supports both old text and new sprite system)
+            if (countdownController != null)
             {
+                countdownController.ShowCountdown(i);
+            }
+            else if (uiManager != null)
+            {
+                // Fallback to text-based countdown if no CountdownController
                 uiManager.ShowCountdown(i.ToString());
             }
+            
             yield return new WaitForSeconds(1f);
         }
         
-        // Show "GO!"
-        if (uiManager != null)
+        // Show "GO!" sprite
+        if (countdownController != null)
+        {
+            countdownController.ShowCountdown(0); // 0 means "GO"
+        }
+        else if (uiManager != null)
         {
             uiManager.ShowCountdown("GO!");
         }
+        
         yield return new WaitForSeconds(0.5f);
         
-        if (uiManager != null)
+        // Hide countdown
+        if (countdownController != null)
+        {
+            countdownController.HideCountdown();
+        }
+        else if (uiManager != null)
         {
             uiManager.HideCountdown();
         }
@@ -171,7 +219,38 @@ public class GameManager : MonoBehaviour
         if (catController.IsBombActive)
         {
             catController.ShowBombUp();
-            FailLevel();
+            
+            // Mark game as failed immediately to prevent further input
+            gameFailed = true;
+            gameStarted = false;
+            
+            // Disable systems immediately
+            if (swipeDetector != null)
+            {
+                swipeDetector.EnableSwipeDetection(false);
+            }
+            
+            if (catController != null)
+            {
+                catController.EnableBombSystem(false);
+            }
+            
+            if (thumbVisualizer != null)
+            {
+                thumbVisualizer.StopRhythm();
+            }
+            
+            // Spawn explosion VFX before showing game over
+            SpawnExplosionVFX();
+            
+            // Play level failed sound (includes explosion)
+            if (audioManager != null)
+            {
+                audioManager.PlayLevelFailedSound();
+            }
+            
+            // Delay the game over panel to let explosion play
+            StartCoroutine(ShowGameOverPanelAfterDelay(gameOverDelayAfterExplosion, true));
             return;
         }
         
@@ -407,16 +486,110 @@ public class GameManager : MonoBehaviour
             thumbVisualizer.StopRhythm();
         }
         
-        // Show fail UI with custom message
-        if (uiManager != null)
+        // Determine failure type and play appropriate sound
+        bool isTooLate = message.Contains("TOO LATE");
+        
+        if (audioManager != null)
         {
-            uiManager.ShowLevelFailed(message);
+            if (isTooLate)
+            {
+                audioManager.PlayTooLateSound();
+            }
+            else
+            {
+                audioManager.PlayLevelFailedSound();
+            }
         }
         
-        // Show start button again to retry
-        if (startButton != null)
+        // Show game over panel with appropriate sprite
+        if (gameOverPanel != null)
         {
-            startButton.gameObject.SetActive(true);
+            gameOverPanel.ShowGameOver(isTooLate);
+        }
+        
+        // Optional: Keep the old text UI for backwards compatibility (can remove later)
+        // if (uiManager != null)
+        // {
+        //     uiManager.ShowLevelFailed(message);
+        // }
+        
+        // Note: Start button not needed anymore as the panel has its own "Start Again" button
+    }
+    
+    /// <summary>
+    /// Spawns explosion VFX at the bomb location
+    /// </summary>
+    private void SpawnExplosionVFX()
+    {
+        if (explosionVFXPrefab == null)
+        {
+            Debug.LogWarning("⚠️ Explosion VFX Prefab not assigned in GameManager!");
+            return;
+        }
+        
+        // Determine spawn position
+        Vector3 spawnPosition;
+        
+        if (vfxSpawnPoint != null)
+        {
+            // Use specified spawn point
+            spawnPosition = vfxSpawnPoint.position;
+        }
+        else if (catController != null)
+        {
+            // Use cat controller position (where the bomb is)
+            spawnPosition = catController.transform.position;
+            
+            // Move VFX slightly forward in Z to render on top of sprites
+            spawnPosition.z -= 1f; // Negative Z is closer to camera in 2D
+        }
+        else
+        {
+            // Fallback to center of screen
+            spawnPosition = Vector3.zero;
+        }
+        
+        // Instantiate explosion VFX
+        GameObject explosion = Instantiate(explosionVFXPrefab, spawnPosition, Quaternion.identity);
+        
+        // Ensure VFX renders on top by setting sorting layer and order
+        ParticleSystemRenderer[] renderers = explosion.GetComponentsInChildren<ParticleSystemRenderer>();
+        foreach (ParticleSystemRenderer renderer in renderers)
+        {
+            // Set to a high sorting order to render on top
+            renderer.sortingOrder = 100; // High value to be above sprites
+            
+            // Optional: Set sorting layer if needed (uncomment and adjust if you have custom layers)
+            // renderer.sortingLayerName = "Effects"; // Create this layer in Unity if needed
+            
+            Debug.Log($"🎨 VFX Renderer sorting order set to: {renderer.sortingOrder}");
+        }
+        
+        Debug.Log($"💥 Explosion VFX spawned at position: {spawnPosition}");
+        
+        // Auto-destroy the VFX after some time (assuming particle systems have auto-destroy or we clean up manually)
+        // Most VFX prefabs have ParticleSystem with "Stop Action: Destroy" so they clean themselves
+        // But we'll add a safety destroy after 5 seconds just in case
+        Destroy(explosion, 5f);
+    }
+    
+    /// <summary>
+    /// Shows the game over panel after a delay (to let explosion VFX play)
+    /// </summary>
+    /// <param name="delay">Delay in seconds</param>
+    /// <param name="isBombExplosion">True if this was caused by bomb explosion (normal fail), false for timeout</param>
+    private IEnumerator ShowGameOverPanelAfterDelay(float delay, bool isBombExplosion)
+    {
+        Debug.Log($"⏳ Waiting {delay}s before showing game over panel...");
+        
+        yield return new WaitForSeconds(delay);
+        
+        // Show game over panel with appropriate sprite
+        if (gameOverPanel != null)
+        {
+            bool isTooLate = !isBombExplosion; // If not bomb explosion, it's a timeout
+            gameOverPanel.ShowGameOver(isTooLate);
+            Debug.Log($"🎮 Game over panel shown - Bomb Explosion: {isBombExplosion}, Too Late: {isTooLate}");
         }
     }
 }
