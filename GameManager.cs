@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 using System.Collections;
 
 public class GameManager : MonoBehaviour
@@ -10,24 +11,33 @@ public class GameManager : MonoBehaviour
     [SerializeField] private CatController catController;
     [SerializeField] private SwipeDetector swipeDetector;
     [SerializeField] private ScoreManager scoreManager;
+    [SerializeField] private LevelManager levelManager;
     [SerializeField] private ThumbVisualizer thumbVisualizer;
     [SerializeField] private AudioManager audioManager;
-    [SerializeField] private GameOverPanelController gameOverPanel;
     [SerializeField] private CountdownController countdownController;
+    
+    [Header("UI Prefabs")]
+    [SerializeField] private GameObject gameOverPanelPrefab; // Prefab of the game over panel
+    [SerializeField] private GameObject levelCompletePanelPrefab; // Prefab of the level complete panel
+    [SerializeField] private Transform uiParent; // Optional: Parent for instantiated UI (usually Canvas)
     
     [Header("VFX")]
     [SerializeField] private GameObject explosionVFXPrefab;
     [SerializeField] private Transform vfxSpawnPoint; // Optional: specific position for VFX
     [SerializeField] private float gameOverDelayAfterExplosion = 1f; // Delay before showing game over panel
     
+     [SerializeField] private TextMeshProUGUI levelNumber;
     private bool gameStarted = false;
     private bool gameFailed = false;
     [SerializeField] private float freezeSecondsWhenBombAppears = 2f;
     
     private bool canDeactivateBomb = false; // Prevents bomb deactivation during initial swipe
+    private GameOverPanelController gameOverPanelInstance; // Runtime instance of the game over panel
+    private LevelCompletePanelController levelCompletePanelInstance; // Runtime instance of level complete panel
     
     void Start()
     {
+        // InstantiateLevelCompletePanel(1, 1, 1);
         // Setup start button
         if (startButton != null)
         {
@@ -54,17 +64,24 @@ public class GameManager : MonoBehaviour
             thumbVisualizer.OnUserTooSlow += HandleUserTooSlow;
         }
         
-        // Setup game over panel events
-        if (gameOverPanel != null)
-        {
-            gameOverPanel.OnStartAgainClicked += OnStartButtonPressed;
-        }
-        
         // Initialize UI
         if (uiManager != null && scoreManager != null)
         {
             uiManager.UpdateScore(scoreManager.CurrentScore);
         }
+        
+        // Update level manager based on current total score
+        if (levelManager != null)
+        {
+            levelManager.UpdateLevelFromTotalScore();
+        }
+
+       // levelNumber.text =levelManager.CurrentLevel.ToString();
+
+    }
+
+    void OnGUI(){
+         levelNumber.text =levelManager.CurrentLevel.ToString();
     }
     
     void OnDestroy()
@@ -87,9 +104,16 @@ public class GameManager : MonoBehaviour
             thumbVisualizer.OnUserTooSlow -= HandleUserTooSlow;
         }
         
-        if (gameOverPanel != null)
+        // Unsubscribe from game over panel if it exists
+        if (gameOverPanelInstance != null)
         {
-            gameOverPanel.OnStartAgainClicked -= OnStartButtonPressed;
+            gameOverPanelInstance.OnStartAgainClicked -= OnStartButtonPressed;
+        }
+        
+        // Unsubscribe from level complete panel if it exists
+        if (levelCompletePanelInstance != null)
+        {
+            levelCompletePanelInstance.OnNextLevelClicked -= OnNextLevelButtonPressed;
         }
     }
     
@@ -140,14 +164,28 @@ public class GameManager : MonoBehaviour
             thumbVisualizer.Reset();
         }
         
-        // Hide game over panel if it was visible
-        if (gameOverPanel != null)
+        // Destroy game over panel if it exists
+        if (gameOverPanelInstance != null)
         {
-            gameOverPanel.HidePanel();
+            Destroy(gameOverPanelInstance.gameObject);
+            gameOverPanelInstance = null;
+        }
+        
+        // Destroy level complete panel if it exists
+        if (levelCompletePanelInstance != null)
+        {
+            Destroy(levelCompletePanelInstance.gameObject);
+            levelCompletePanelInstance = null;
         }
         
         // Start countdown
-            StartCoroutine(CountdownCoroutine());
+        StartCoroutine(CountdownCoroutine());
+    }
+    
+    private void OnNextLevelButtonPressed()
+    {
+        // Same as starting new game, but level is already advanced
+        OnStartButtonPressed();
     }
     
     private IEnumerator CountdownCoroutine()
@@ -298,6 +336,9 @@ public class GameManager : MonoBehaviour
                 {
                     uiManager.UpdateScore(scoreManager.CurrentScore);
                 }
+                
+                // Check for level completion
+                CheckLevelCompletion();
             }
         }
     }
@@ -460,6 +501,62 @@ public class GameManager : MonoBehaviour
         FailLevel("TOO LATE!");
     }
     
+    /// <summary>
+    /// Checks if the player has reached the level target based on total score
+    /// </summary>
+    private void CheckLevelCompletion()
+    {
+        if (levelManager == null || scoreManager == null) return;
+        
+        // Calculate what total score would be after this attempt
+        int currentScore = scoreManager.CurrentScore;
+        int currentTotal = PlayerPrefs.GetInt("totalScore", 0);
+        int potentialTotal = currentTotal + currentScore;
+        
+        // Check if the potential total reaches the current level target
+        if (potentialTotal >= levelManager.CurrentLevelTarget)
+        {
+            Debug.Log($"🎉 Level {levelManager.CurrentLevel} completed! Attempt: {currentScore}, Total will be: {potentialTotal}/{levelManager.CurrentLevelTarget}");
+            
+            // Mark game as completed
+            gameFailed = false;
+            gameStarted = false;
+            
+            // Disable systems
+            if (swipeDetector != null)
+            {
+                swipeDetector.EnableSwipeDetection(false);
+            }
+            
+            if (catController != null)
+            {
+                catController.EnableBombSystem(false);
+            }
+            
+            if (thumbVisualizer != null)
+            {
+                thumbVisualizer.StopRhythm();
+            }
+            
+            // Update total score
+            PlayerPrefs.SetInt("totalScore", potentialTotal);
+            PlayerPrefs.Save();
+            
+            // Store current level data before advancing
+            int completedLevel = levelManager.CurrentLevel;
+            int finalScore = currentScore;
+            
+            // Update level based on new total (this might advance to next level)
+            levelManager.UpdateLevelFromTotalScore();
+            
+            // Get next level target
+            int nextLevelTarget = levelManager.CurrentLevelTarget;
+            
+            // Show level complete panel
+            InstantiateLevelCompletePanel(completedLevel, finalScore, nextLevelTarget);
+        }
+    }
+    
     private void FailLevel()
     {
         FailLevel("LEVEL FAILED!");
@@ -501,11 +598,30 @@ public class GameManager : MonoBehaviour
             }
         }
         
-        // Show game over panel with appropriate sprite
-        if (gameOverPanel != null)
+        // Get current data and update total score
+        int currentScore = scoreManager != null ? scoreManager.CurrentScore : 0;
+        int currentTotal = PlayerPrefs.GetInt("totalScore", 0);
+        int newTotal = currentTotal + currentScore;
+        PlayerPrefs.SetInt("totalScore", newTotal);
+        PlayerPrefs.Save();
+        
+        Debug.Log($"💎 Total Score updated: {currentTotal} + {currentScore} = {newTotal}");
+        
+        // Update level based on new total score
+        if (levelManager != null)
         {
-            gameOverPanel.ShowGameOver(isTooLate);
+            levelManager.UpdateLevelFromTotalScore();
         }
+        
+        int levelTarget = levelManager != null ? levelManager.CurrentLevelTarget : 100;
+        
+        Debug.Log($"🎯 FAIL LEVEL - Score: {currentScore}, Target: {levelTarget}");
+        
+        // Get updated total score for progress display
+        int updatedTotalScore = PlayerPrefs.GetInt("totalScore", 0);
+        
+        // Instantiate and show game over panel
+        InstantiateGameOverPanel(isTooLate, updatedTotalScore, levelTarget, currentScore);
         
         // Optional: Keep the old text UI for backwards compatibility (can remove later)
         // if (uiManager != null)
@@ -514,6 +630,128 @@ public class GameManager : MonoBehaviour
         // }
         
         // Note: Start button not needed anymore as the panel has its own "Start Again" button
+    }
+    
+    /// <summary>
+    /// Instantiates the game over panel from prefab and shows it
+    /// </summary>
+    /// <param name="isTooLate">True if timeout failure, false if bomb explosion</param>
+    private void InstantiateGameOverPanel(bool isTooLate)
+    {
+        InstantiateGameOverPanel(isTooLate, 0, 100);
+    }
+    
+    /// <summary>
+    /// Instantiates the game over panel from prefab and shows it with score info
+    /// </summary>
+    /// <param name="isTooLate">True if timeout failure, false if bomb explosion</param>
+    /// <param name="totalScore">Current total score</param>
+    /// <param name="levelTarget">Target score for current level</param>
+    private void InstantiateGameOverPanel(bool isTooLate, int totalScore, int levelTarget)
+    {
+        InstantiateGameOverPanel(isTooLate, totalScore, levelTarget, 0);
+    }
+    
+    /// <summary>
+    /// Instantiates the game over panel from prefab and shows it with detailed score info
+    /// </summary>
+    /// <param name="isTooLate">True if timeout failure, false if bomb explosion</param>
+    /// <param name="totalScore">Current total score</param>
+    /// <param name="levelTarget">Target score for current level</param>
+    /// <param name="attemptScore">Score achieved in this attempt</param>
+    private void InstantiateGameOverPanel(bool isTooLate, int totalScore, int levelTarget, int attemptScore)
+    {
+        if (gameOverPanelPrefab == null)
+        {
+            Debug.LogWarning("⚠️ Game Over Panel Prefab not assigned in GameManager!");
+            return;
+        }
+        
+        // Don't create if one already exists
+        if (gameOverPanelInstance != null)
+        {
+            Debug.LogWarning("⚠️ Game Over Panel already exists! Destroying old one...");
+            Destroy(gameOverPanelInstance.gameObject);
+        }
+        
+        // Determine parent (Canvas or root)
+        Transform parent = uiParent;
+        if (parent == null)
+        {
+            // Try to find Canvas automatically
+            Canvas canvas = FindObjectOfType<Canvas>();
+            if (canvas != null)
+            {
+                parent = canvas.transform;
+                Debug.Log("📍 Using auto-found Canvas as parent for Game Over Panel");
+            }
+        }
+        
+        // Instantiate the prefab
+        GameObject panelObject = Instantiate(gameOverPanelPrefab, parent);
+        
+        // Ensure the panel GameObject is active
+        panelObject.SetActive(true);
+        
+        // Get the controller component
+        gameOverPanelInstance = panelObject.GetComponent<GameOverPanelController>();
+        
+        if (gameOverPanelInstance == null)
+        {
+            Debug.LogError("❌ Game Over Panel Prefab does not have GameOverPanelController component!");
+            Destroy(panelObject);
+            return;
+        }
+        
+        // Subscribe to the start again event
+        gameOverPanelInstance.OnStartAgainClicked += OnStartButtonPressed;
+        
+        // Show the panel with total score progress and attempt score
+        gameOverPanelInstance.ShowGameOver(isTooLate, totalScore, levelTarget, attemptScore);
+        
+        Debug.Log($"🎮 Game Over Panel: Attempt {attemptScore}, Total {totalScore}/{levelTarget}");
+    }
+    
+    /// <summary>
+    /// Instantiates the level complete panel from prefab and shows it
+    /// </summary>
+    private void InstantiateLevelCompletePanel(int completedLevel, int finalScore, int nextLevelTarget)
+    {
+     
+        // Don't create if one already exists
+        if (levelCompletePanelInstance != null)
+        {
+            Debug.LogWarning("⚠️ Level Complete Panel already exists! Destroying old one...");
+            Destroy(levelCompletePanelInstance.gameObject);
+        }
+        
+        // Determine parent (Canvas or root)
+        Transform parent = uiParent;
+        
+        
+        // Instantiate the prefab
+        GameObject panelObject = Instantiate(levelCompletePanelPrefab, parent);
+        
+        // Ensure the panel GameObject is active
+        panelObject.SetActive(true);
+        
+        // Get the controller component
+        levelCompletePanelInstance = panelObject.GetComponent<LevelCompletePanelController>();
+        
+        if (levelCompletePanelInstance == null)
+        {
+            Debug.LogError("❌ Level Complete Panel Prefab does not have LevelCompletePanelController component!");
+            Destroy(panelObject);
+            return;
+        }
+        
+        // Subscribe to the next level event
+        levelCompletePanelInstance.OnNextLevelClicked += OnNextLevelButtonPressed;
+        
+        // Show the panel with level completion info
+        levelCompletePanelInstance.ShowLevelComplete(completedLevel, finalScore, nextLevelTarget);
+        
+        Debug.Log($"🎉 Level Complete Panel instantiated - Level: {completedLevel}, Score: {finalScore}, Next Target: {nextLevelTarget}");
     }
     
     /// <summary>
@@ -580,16 +818,33 @@ public class GameManager : MonoBehaviour
     /// <param name="isBombExplosion">True if this was caused by bomb explosion (normal fail), false for timeout</param>
     private IEnumerator ShowGameOverPanelAfterDelay(float delay, bool isBombExplosion)
     {
-        Debug.Log($"⏳ Waiting {delay}s before showing game over panel...");
+        
         
         yield return new WaitForSeconds(delay);
         
-        // Show game over panel with appropriate sprite
-        if (gameOverPanel != null)
+        // Get current data
+        int currentScore = scoreManager != null ? scoreManager.CurrentScore : 0;
+        int currentTotal = PlayerPrefs.GetInt("totalScore", 0);
+        int newTotal = currentTotal + currentScore;
+        PlayerPrefs.SetInt("totalScore", newTotal);
+        PlayerPrefs.Save();
+        
+        Debug.Log($"💎 Total Score updated: {currentTotal} + {currentScore} = {newTotal}");
+        
+        // Update level based on new total score
+        if (levelManager != null)
         {
-            bool isTooLate = !isBombExplosion; // If not bomb explosion, it's a timeout
-            gameOverPanel.ShowGameOver(isTooLate);
-            Debug.Log($"🎮 Game over panel shown - Bomb Explosion: {isBombExplosion}, Too Late: {isTooLate}");
+            levelManager.UpdateLevelFromTotalScore();
         }
+        
+        int levelTarget = levelManager != null ? levelManager.CurrentLevelTarget : 100;
+        
+        // Get updated total score for progress display
+        int updatedTotalScore = PlayerPrefs.GetInt("totalScore", 0);
+        
+        // Instantiate and show game over panel
+        bool isTooLate = !isBombExplosion; // If not bomb explosion, it's a timeout
+        InstantiateGameOverPanel(isTooLate, updatedTotalScore, levelTarget, currentScore);
+        
     }
 }

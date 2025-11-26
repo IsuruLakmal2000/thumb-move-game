@@ -14,13 +14,18 @@ public class GameOverPanelController : MonoBehaviour
     [Header("Button References")]
     [SerializeField] private Button startAgainButton;
     
+    [Header("Progress UI")]
+    [SerializeField] private Slider progressSlider;
+    [SerializeField] private TMPro.TextMeshProUGUI progressText; // Shows "120 / 300" (total score / level target)
+    [SerializeField] private TMPro.TextMeshProUGUI attemptScoreText; // Shows "This Attempt: +45"
+    
     [Header("Audio References")]
     [SerializeField] private AudioManager audioManager;
     
     // Event that GameManager can subscribe to
     public event System.Action OnStartAgainClicked;
     
-    private void Start()
+    private void Awake()
     {
         // Setup button listener
         if (startAgainButton != null)
@@ -28,8 +33,8 @@ public class GameOverPanelController : MonoBehaviour
             startAgainButton.onClick.AddListener(HandleStartAgainClicked);
         }
         
-        // Hide panel at start
-        HidePanel();
+        // Don't hide panel in Awake - let the instantiator control visibility
+        // If this prefab is in the scene, it should start inactive in the Inspector
     }
     
     private void OnDestroy()
@@ -55,6 +60,29 @@ public class GameOverPanelController : MonoBehaviour
     /// <param name="isTooLate">True if player was too slow, false for normal game over</param>
     public void ShowGameOver(bool isTooLate)
     {
+        ShowGameOver(isTooLate, 0, 100);
+    }
+    
+    /// <summary>
+    /// Shows the game over panel with score/level progress
+    /// </summary>
+    /// <param name="isTooLate">True if player was too slow, false for normal game over</param>
+    /// <param name="totalScore">Current total score</param>
+    /// <param name="levelTarget">Target score for current level</param>
+    public void ShowGameOver(bool isTooLate, int totalScore, int levelTarget)
+    {
+        ShowGameOver(isTooLate, totalScore, levelTarget, 0);
+    }
+    
+    /// <summary>
+    /// Shows the game over panel with detailed score information
+    /// </summary>
+    /// <param name="isTooLate">True if player was too slow, false for normal game over</param>
+    /// <param name="totalScore">Current total score</param>
+    /// <param name="levelTarget">Target score for current level</param>
+    /// <param name="attemptScore">Score achieved in this attempt</param>
+    public void ShowGameOver(bool isTooLate, int totalScore, int levelTarget, int attemptScore)
+    {
         if (gameOverPanel != null)
         {
             gameOverPanel.SetActive(true);
@@ -75,8 +103,54 @@ public class GameOverPanelController : MonoBehaviour
             }
         }
         
-        Debug.Log($"🔴 Game Over Panel displayed - Too Late: {isTooLate}");
+        // Update progress slider and text (total score progress)
+        UpdateProgress(totalScore, levelTarget);
+        
+        // Update attempt score text if provided
+        UpdateAttemptScore(attemptScore);
+        
+        Debug.Log($"🔴 Game Over Panel displayed - Too Late: {isTooLate}, Total: {totalScore}/{levelTarget}, Attempt: +{attemptScore}");
     }
+    
+    /// <summary>
+    /// Updates the progress slider and text to show total score progression toward level target
+    /// </summary>
+    public void UpdateProgress(int totalScore, int levelTarget)
+    {
+        // Update slider
+        if (progressSlider != null)
+        {
+            float progress = levelTarget > 0 ? (float)totalScore / levelTarget : 0f;
+            progressSlider.value = progress;
+            Debug.Log($"📊 Level progress: {progress:P0} ({totalScore}/{levelTarget})");
+        }
+        
+        // Update text
+        if (progressText != null)
+        {
+            progressText.text = $"{totalScore} / {levelTarget}";
+            Debug.Log($"📝 Level progress text: {totalScore} / {levelTarget}");
+        }
+    }
+    
+    /// <summary>
+    /// Updates the attempt score display
+    /// </summary>
+    public void UpdateAttemptScore(int attemptScore)
+    {
+        if (attemptScoreText != null && attemptScore > 0)
+        {
+            attemptScoreText.text = $"This Attempt: +{attemptScore}";
+            attemptScoreText.gameObject.SetActive(true);
+            Debug.Log($"📝 Attempt score text: +{attemptScore}");
+        }
+        else if (attemptScoreText != null)
+        {
+            attemptScoreText.gameObject.SetActive(false);
+        }
+    }
+    
+
     
     /// <summary>
     /// Hides the game over panel
