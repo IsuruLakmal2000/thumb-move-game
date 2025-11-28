@@ -26,7 +26,13 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Transform vfxSpawnPoint; // Optional: specific position for VFX
     [SerializeField] private float gameOverDelayAfterExplosion = 1f; // Delay before showing game over panel
     
-     [SerializeField] private TextMeshProUGUI levelNumber;
+    [Header("Total Score Display")]
+    [SerializeField] private TotalScoreDisplay totalScoreDisplay; // Optional: reference to update total score UI
+    
+    [Header("Ad Manager")]
+    [SerializeField] private AdManager adManager; // Optional: reference to AdManager for interstitial ads
+    
+    [SerializeField] private TextMeshProUGUI levelNumber;
     private bool gameStarted = false;
     private bool gameFailed = false;
     [SerializeField] private float freezeSecondsWhenBombAppears = 2f;
@@ -310,6 +316,12 @@ public class GameManager : MonoBehaviour
                 case CatController.CoupleType.CatSnake:
                     catController.ShowCatSnakeUp();
                     break;
+                case CatController.CoupleType.SantaDoll:
+                    catController.ShowSantaDollUp();
+                    break;
+                case CatController.CoupleType.SantaSockCat:
+                    catController.ShowSantaSockCatUp();
+                    break;
                 case CatController.CoupleType.Bomb:
                     catController.ShowCatUp(); // Fallback
                     break;
@@ -371,6 +383,12 @@ public class GameManager : MonoBehaviour
                     case CatController.CoupleType.CatSnake:
                         catController.ShowCatSnakeDown();
                         break;
+                    case CatController.CoupleType.SantaDoll:
+                        catController.ShowSantaDollDown();
+                        break;
+                    case CatController.CoupleType.SantaSockCat:
+                        catController.ShowSantaSockCatDown();
+                        break;
                     default:
                         catController.ShowCatDown();
                         break;
@@ -404,6 +422,12 @@ public class GameManager : MonoBehaviour
                     break;
                 case CatController.CoupleType.CatSnake:
                     catController.ShowCatSnakeDown();
+                    break;
+                case CatController.CoupleType.SantaDoll:
+                    catController.ShowSantaDollDown();
+                    break;
+                case CatController.CoupleType.SantaSockCat:
+                    catController.ShowSantaSockCatDown();
                     break;
                 case CatController.CoupleType.Bomb:
                     catController.ShowCatDown(); // Fallback
@@ -478,6 +502,12 @@ public class GameManager : MonoBehaviour
                 case CatController.CoupleType.CatSnake:
                     catController.ShowCatSnakeDown();
                     break;
+                case CatController.CoupleType.SantaDoll:
+                    catController.ShowSantaDollDown();
+                    break;
+                case CatController.CoupleType.SantaSockCat:
+                    catController.ShowSantaSockCatDown();
+                    break;
                 default:
                     catController.ShowCatDown();
                     break;
@@ -541,6 +571,9 @@ public class GameManager : MonoBehaviour
             // Update total score
             PlayerPrefs.SetInt("totalScore", potentialTotal);
             PlayerPrefs.Save();
+            
+            // Refresh total score display
+            RefreshTotalScoreDisplay();
             
             // Store current level data before advancing
             int completedLevel = levelManager.CurrentLevel;
@@ -607,6 +640,9 @@ public class GameManager : MonoBehaviour
         
         Debug.Log($"💎 Total Score updated: {currentTotal} + {currentScore} = {newTotal}");
         
+        // Refresh total score display
+        RefreshTotalScoreDisplay();
+        
         // Update level based on new total score
         if (levelManager != null)
         {
@@ -622,6 +658,9 @@ public class GameManager : MonoBehaviour
         
         // Instantiate and show game over panel
         InstantiateGameOverPanel(isTooLate, updatedTotalScore, levelTarget, currentScore);
+        
+        // Track failure for ad display
+        TrackPlayerFailure();
         
         // Optional: Keep the old text UI for backwards compatibility (can remove later)
         // if (uiManager != null)
@@ -831,6 +870,9 @@ public class GameManager : MonoBehaviour
         
         Debug.Log($"💎 Total Score updated: {currentTotal} + {currentScore} = {newTotal}");
         
+        // Refresh total score display
+        RefreshTotalScoreDisplay();
+        
         // Update level based on new total score
         if (levelManager != null)
         {
@@ -846,5 +888,42 @@ public class GameManager : MonoBehaviour
         bool isTooLate = !isBombExplosion; // If not bomb explosion, it's a timeout
         InstantiateGameOverPanel(isTooLate, updatedTotalScore, levelTarget, currentScore);
         
+        // Track failure for ad display
+        TrackPlayerFailure();
+        
+    }
+    
+    /// <summary>
+    /// Tracks player failure and shows interstitial ad if threshold is reached
+    /// </summary>
+    private void TrackPlayerFailure()
+    {
+        // Try assigned reference first
+        if (adManager != null)
+        {
+            adManager.OnPlayerFailed();
+        }
+        // Fallback to singleton instance
+        else if (AdManager.Instance != null)
+        {
+            AdManager.Instance.OnPlayerFailed();
+        }
+    }
+    
+    /// <summary>
+    /// Refreshes the total score display UI
+    /// </summary>
+    private void RefreshTotalScoreDisplay()
+    {
+        // Try assigned reference first
+        if (totalScoreDisplay != null)
+        {
+            totalScoreDisplay.RefreshScore();
+        }
+        // Fallback to singleton instance
+        else if (TotalScoreDisplay.Instance != null)
+        {
+            TotalScoreDisplay.Instance.RefreshScore();
+        }
     }
 }

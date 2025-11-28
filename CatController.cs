@@ -16,6 +16,16 @@ public class CatController : MonoBehaviour
     [SerializeField] private Sprite catSnakeDownSprite;
     [SerializeField] private Sprite catSnakeUpSprite;
     
+    [Header("Santa Couple Sprites")]
+    [SerializeField] private Sprite santaDollDownSprite;
+    [SerializeField] private Sprite santaDollUpSprite;
+    [SerializeField] private Sprite santaBombDownSprite;
+    [SerializeField] private Sprite santaBombUpSprite;
+    [SerializeField] private Sprite santaSockCatDownSprite;
+    [SerializeField] private Sprite santaSockCatUpSprite;
+    [SerializeField] private Sprite ckBombDownSprite;
+    [SerializeField] private Sprite ckBombUpSprite;
+    
     [Header("Couple Settings")]
     [SerializeField] private int minRoundsPerCouple = 3; // Minimum rounds before switching couple
     [SerializeField] private float coupleChangeChance = 0.4f; // Chance to change couple after min rounds
@@ -34,7 +44,11 @@ public class CatController : MonoBehaviour
     
     public event Action OnBombTimeout;
     
-    public enum CoupleType { Cat, Bomb, Dog, Pig, CatSnake }
+    // Regular couples for normal gameplay
+    public enum CoupleType { Cat, Bomb, Dog, Pig, CatSnake, SantaDoll, SantaSockCat }
+    
+    // Bomb variants - these are different visual styles for the bomb obstacle (Default, SantaBomb, CKBomb)
+    public enum BombVariant { Default, SantaBomb, CKBomb }
     
     private bool isUp = false;
     private bool isBomb = false;
@@ -49,6 +63,7 @@ public class CatController : MonoBehaviour
     private CoupleType currentCouple = CoupleType.Cat;
     private int currentCoupleRounds = 0;
     private CoupleType coupleBeforeBomb = CoupleType.Cat; // Store couple before bomb appears
+    private BombVariant currentBombVariant = BombVariant.Default; // Track which bomb variant is showing
     
     // Dynamic bomb chance tracking
     private int consecutiveSameCoupleSwipes = 0; // Tracks swipes with same couple (Cat or Dog)
@@ -169,25 +184,68 @@ public class CatController : MonoBehaviour
         // Store the current couple so we can restore it after bomb
         coupleBeforeBomb = currentCouple;
         
-        if (spriteRenderer != null && bombDownSprite != null)
+        // Randomly select a bomb variant (Default, SantaBomb, or CKBomb)
+        BombVariant[] variants = { BombVariant.Default, BombVariant.SantaBomb, BombVariant.CKBomb };
+        currentBombVariant = variants[UnityEngine.Random.Range(0, variants.Length)];
+        
+        // Get the appropriate down sprite for this bomb variant
+        Sprite bombSprite = GetBombDownSprite(currentBombVariant);
+        
+        if (spriteRenderer != null && bombSprite != null)
         {
-            spriteRenderer.sprite = bombDownSprite;
+            spriteRenderer.sprite = bombSprite;
             isUp = false;
             isBomb = true;
             
             // Trigger shake animation when bomb appears
             StartShake();
             
-            Debug.Log($"💣 Bomb appeared! Preserving couple: {currentCouple} (rounds: {currentCoupleRounds})");
+            Debug.Log($"💣 Bomb appeared ({currentBombVariant})! Preserving couple: {currentCouple} (rounds: {currentCoupleRounds})");
+        }
+    }
+    
+    /// <summary>
+    /// Gets the down sprite for the specified bomb variant
+    /// </summary>
+    private Sprite GetBombDownSprite(BombVariant variant)
+    {
+        switch (variant)
+        {
+            case BombVariant.SantaBomb:
+                return santaBombDownSprite;
+            case BombVariant.CKBomb:
+                return ckBombDownSprite;
+            case BombVariant.Default:
+            default:
+                return bombDownSprite;
+        }
+    }
+    
+    /// <summary>
+    /// Gets the up sprite for the specified bomb variant
+    /// </summary>
+    private Sprite GetBombUpSprite(BombVariant variant)
+    {
+        switch (variant)
+        {
+            case BombVariant.SantaBomb:
+                return santaBombUpSprite;
+            case BombVariant.CKBomb:
+                return ckBombUpSprite;
+            case BombVariant.Default:
+            default:
+                return bombUpSprite;
         }
     }
     
     public void ShowBombUp()
     {
-        // DON'T change currentCouple - just show bomb sprite
-        if (spriteRenderer != null && bombUpSprite != null)
+        // DON'T change currentCouple - just show the matching bomb variant up sprite
+        Sprite bombUpSpriteToShow = GetBombUpSprite(currentBombVariant);
+        
+        if (spriteRenderer != null && bombUpSpriteToShow != null)
         {
-            spriteRenderer.sprite = bombUpSprite;
+            spriteRenderer.sprite = bombUpSpriteToShow;
             isUp = true;
             isBomb = true;
         }
@@ -264,6 +322,118 @@ public class CatController : MonoBehaviour
         if (spriteRenderer != null && catSnakeUpSprite != null)
         {
             spriteRenderer.sprite = catSnakeUpSprite;
+            isUp = true;
+            isBomb = false;
+            
+            // Count round and check for change
+            currentCoupleRounds++;
+            Debug.Log($"✅ Round completed for {currentCouple}. Total rounds: {currentCoupleRounds}/{minRoundsPerCouple}");
+            CheckForCoupleChange();
+        }
+    }
+    
+    // ====== SANTA DOLL COUPLE ======
+    public void ShowSantaDollDown()
+    {
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && santaDollDownSprite != null)
+        {
+            spriteRenderer.sprite = santaDollDownSprite;
+            isUp = false;
+            isBomb = false;
+        }
+    }
+    
+    public void ShowSantaDollUp()
+    {
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && santaDollUpSprite != null)
+        {
+            spriteRenderer.sprite = santaDollUpSprite;
+            isUp = true;
+            isBomb = false;
+            
+            // Count round and check for change
+            currentCoupleRounds++;
+            Debug.Log($"✅ Round completed for {currentCouple}. Total rounds: {currentCoupleRounds}/{minRoundsPerCouple}");
+            CheckForCoupleChange();
+        }
+    }
+    
+    // ====== SANTA BOMB COUPLE ======
+    public void ShowSantaBombDown()
+    {
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && santaBombDownSprite != null)
+        {
+            spriteRenderer.sprite = santaBombDownSprite;
+            isUp = false;
+            isBomb = false;
+        }
+    }
+    
+    public void ShowSantaBombUp()
+    {
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && santaBombUpSprite != null)
+        {
+            spriteRenderer.sprite = santaBombUpSprite;
+            isUp = true;
+            isBomb = false;
+            
+            // Count round and check for change
+            currentCoupleRounds++;
+            Debug.Log($"✅ Round completed for {currentCouple}. Total rounds: {currentCoupleRounds}/{minRoundsPerCouple}");
+            CheckForCoupleChange();
+        }
+    }
+    
+    // ====== SANTA SOCK CAT COUPLE ======
+    public void ShowSantaSockCatDown()
+    {
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && santaSockCatDownSprite != null)
+        {
+            spriteRenderer.sprite = santaSockCatDownSprite;
+            isUp = false;
+            isBomb = false;
+        }
+    }
+    
+    public void ShowSantaSockCatUp()
+    {
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && santaSockCatUpSprite != null)
+        {
+            spriteRenderer.sprite = santaSockCatUpSprite;
+            isUp = true;
+            isBomb = false;
+            
+            // Count round and check for change
+            currentCoupleRounds++;
+            Debug.Log($"✅ Round completed for {currentCouple}. Total rounds: {currentCoupleRounds}/{minRoundsPerCouple}");
+            CheckForCoupleChange();
+        }
+    }
+    
+    // ====== CK BOMB COUPLE ======
+    public void ShowCKBombDown()
+    {
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && ckBombDownSprite != null)
+        {
+            spriteRenderer.sprite = ckBombDownSprite;
+            isUp = false;
+            isBomb = false;
+        }
+    }
+    
+    public void ShowCKBombUp()
+    {
+        // Only show sprite, don't change couple type
+        if (spriteRenderer != null && ckBombUpSprite != null)
+        {
+            spriteRenderer.sprite = ckBombUpSprite;
             isUp = true;
             isBomb = false;
             
@@ -405,6 +575,10 @@ public class CatController : MonoBehaviour
                 return pigDownSprite;
             case CoupleType.CatSnake:
                 return catSnakeDownSprite;
+            case CoupleType.SantaDoll:
+                return santaDollDownSprite;
+            case CoupleType.SantaSockCat:
+                return santaSockCatDownSprite;
             default:
                 return catDownSprite;
         }
@@ -424,6 +598,10 @@ public class CatController : MonoBehaviour
                 return pigUpSprite;
             case CoupleType.CatSnake:
                 return catSnakeUpSprite;
+            case CoupleType.SantaDoll:
+                return santaDollUpSprite;
+            case CoupleType.SantaSockCat:
+                return santaSockCatUpSprite;
             default:
                 return catUpSprite;
         }
@@ -457,8 +635,9 @@ public class CatController : MonoBehaviour
         CoupleType oldCouple = currentCouple;
         int oldRounds = currentCoupleRounds;
         
-        // Get a different couple type (excluding Bomb type)
-        CoupleType[] allCouples = { CoupleType.Cat, CoupleType.Dog, CoupleType.Pig, CoupleType.CatSnake };
+        // Get a different couple type (excluding Bomb type - bomb variants are handled separately)
+        CoupleType[] allCouples = { CoupleType.Cat, CoupleType.Dog, CoupleType.Pig, CoupleType.CatSnake, 
+                                     CoupleType.SantaDoll, CoupleType.SantaSockCat };
         CoupleType newCouple;
         
         do
